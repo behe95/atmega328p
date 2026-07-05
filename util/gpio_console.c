@@ -14,16 +14,12 @@
 *           during debugging.
 */
 
-
-
+#include <stdint.h>
+#include <avr/io.h>
+#include "gpio_console.h"
 
 void display(uint8_t b);
 uint8_t reverse(int left, int len, uint8_t value);    // helper function
-
-int main(void) {
-  display(0b11010100);
-  while(1);
-}
 
 
 void display(uint8_t b) {
