@@ -1,6 +1,8 @@
 /**
 * Reads data from the DHT11 sensor and display via UART protocol
 * ref: https://components101.com/sites/default/files/component_datasheet/DFR0067%20DHT11%20Datasheet.pdf
+*
+*	ADD: CMD Line for User Input
 */
 
 #define F_CPU 16000000UL
@@ -10,6 +12,7 @@
 
 #define RX_BUFFER_SIZE 32
 #include <util/delay.h>
+#define LINE_MAX 32
 
 
 void uart_putc(char c);
@@ -23,8 +26,11 @@ uint8_t uart_available(void);
 char uart_getc_buffered(void);
 
 uint8_t dht_read(uint8_t* hum, uint8_t* temp);
+void handle_cmd(char* line);
 
+uint8_t uart_readline(char* buf, uint8_t maxlen);
 
+uint8_t str_eq(const char* a, const char* b);
 volatile char rx_buffer[RX_BUFFER_SIZE];
 volatile uint8_t rx_head = 0;
 volatile uint8_t rx_tail = 0;
@@ -53,7 +59,7 @@ int main(void) {
 	UBRR0H = 0;
 	UBRR0L = 103;
 
-	UCSR0B = (1 << TXEN0) | (1 << RXEN0);// | (1 << RXCIE0);
+	UCSR0B = (1 << TXEN0) | (1 << RXEN0) | (1 << RXCIE0);
 	
 
 	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
@@ -63,7 +69,19 @@ int main(void) {
 
 	int temperature = -5;
 	unsigned long counter = 0;
+	
 
+	char line[LINE_MAX];
+	
+	uart_puts("Type 'help' to show available commands\r\n");
+
+	while(1) {
+		
+		uart_puts("> ");
+		uart_readline(line, LINE_MAX);
+		handle_cmd(line);
+	}
+	/*
 	while(1) {
 		//if(uart_available()) {
 		//	char c = uart_getc_buffered();
@@ -88,7 +106,7 @@ int main(void) {
 
 		_delay_ms(2000);
 
-	}
+	}*/
 
 }
 
@@ -278,5 +296,79 @@ uint8_t dht_read(uint8_t* hum, uint8_t* temp){
 		*hum = data[0];
 		*temp = data[2];
 		return 0;
+
+}
+
+
+// character by character comparison
+uint8_t str_eq(const char* a, const char* b) {
+	while(*a && *b){
+		if(*a != *b) {
+			return 0;
+		}
+		a++;
+		b++;
+	}	
+
+	return *a == 0 && *b ==0;
+}
+
+
+
+uint8_t uart_readline(char* buf, uint8_t maxlen) {
+	uint8_t idx = 0;
+
+	while(1) {
+		if(uart_available()) {
+			char c = uart_getc_buffered();
+			if(c == '\n' || c == '\r') {
+				buf[idx] = 0;
+				uart_puts("\r\n");
+				return idx;
+			} else if(c == 8 || c == 127) {
+				if(idx > 0) {
+					idx--;
+					uart_puts("\b \b");
+				}
+			} else if(idx < (uint8_t)(maxlen-1)) {
+				buf[idx] = c;
+				idx++;
+				uart_putc(c);
+			} 		
+		}
+	}
+
+}
+
+
+void handle_cmd(char* line) {
+	if(!(*line)) {
+		return;
+	}
+
+	if(str_eq(line, "help")) {
+		uart_puts("        Commands        \r\n");
+		uart_puts("    1. show_temp\r\n");
+		uart_puts("    2. show_humidity\r\n");
+	} else if(str_eq(line, "show_temp")) {
+		uint8_t temp, hum;
+		uint8_t err = dht_read(&hum, &temp);
+		if(err == 0) {
+			uart_printf("Temperature: %u C\r\n", (unsigned int)temp);
+		} else {
+			uart_printf("DHT11 error code: %u\r\n", (unsigned int) err);
+		} 
+	} else if(str_eq(line, "show_humidity")) {
+		uint8_t temp, hum;
+		uint8_t err = dht_read(&hum, &temp);
+		if(err == 0) {
+			uart_printf("Humidity: %u %%\r\n", (unsigned int)hum);
+		} else {
+			uart_printf("DHT11 error code: %u\r\n", (unsigned int) err);
+		}
+	} else {
+			uart_printf("Unknown command. Type 'help'\r\n");
+	}
+	
 
 }
